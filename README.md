@@ -17,11 +17,14 @@ I might refactor some of the code at some point and/or add additional functional
 
 Contributions are welcome though! :D
 
-Command line takes 3 arguments:
+Command line takes 3 arguments (the 3rd is optional):
   1. ProcessName (including .exe)
   2.	Name of DLL (including .dll)
-  3.	The action – either "TTD" or "DBG" (haven't made default yet, so this is needed – I'll do more work on this in the next weeks/months probably)
+  3.	The action (optional) – either "TTD" or "DBG" - default is "TTD"
 
-Ex. command line (after copying into TTD folder next to TTTRacer.exe): DiagOnEtwEvent.exe PowerShell.exe Microsoft.PowerShell.Security.dll TTD
+Ex. command line (after copying into TTD folder next to TTTRacer.exe): DiagOnEtwEvent.exe PowerShell.exe Microsoft.PowerShell.Security.dll
 
-After starting PowerShell, we can see that it's going to start the recording with TTD - at this point, after we finish, we need to uncheck the "Tracing On" checkbox and it will stop the trace and we need to press any key in the CMD window afterwards where it is running (will take care of this too, soon …).
+After starting PowerShell, we can see that it's going to start the recording with TTD - at this point, after we finish, we need to uncheck the "Tracing On" checkbox and it will stop the trace and end the monitoring. To just cancel and stop monitoring for ETW events, use Ctrl+C.
+
+Enjoy! :D
+
