@@ -16,3 +16,12 @@ This is very nice to have because we can add functionatlity to this (either by c
 I might refactor some of the code at some point and/or add additional functionality, depending on how much time I get to invest in this project. Currently it's exactly what I need, so no other functionality for now, hehe :D
 
 Contributions are welcome though! :D
+
+Command line takes 3 arguments:
+  1. ProcessName (including .exe)
+  2.	Name of DLL (including .dll)
+  3.	The action – either "TTD" or "DBG" (haven't made default yet, so this is needed – I'll do more work on this in the next weeks/months probably)
+
+Ex. command line (after copying into TTD folder next to TTTRacer.exe): DiagOnEtwEvent.exe PowerShell.exe Microsoft.PowerShell.Security.dll TTD
+
+After starting PowerShell, we can see that it's going to start the recording with TTD - at this point, after we finish, we need to uncheck the "Tracing On" checkbox and it will stop the trace and we need to press any key in the CMD window afterwards where it is running (will take care of this too, soon …).
