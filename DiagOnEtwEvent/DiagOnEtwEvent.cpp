@@ -1,6 +1,8 @@
 #include "DiagOnEtwEvent.h"
 #include "Ktrace.h"
 
+HANDLE g_stopEventHandle;
+
 //-------------------------------------------------------------------------
 // Function for kernel trace thread.  It will call Run(), which
 // calls ProcessTrace() Windows API call.
@@ -13,63 +15,58 @@ static DWORD WINAPI KernelTraceThreadFunc(LPVOID lpParam)
     return 0;
 }
 
-TCHAR WaitPressAnyKey(const TCHAR* prompt = NULL)
-{
-    TCHAR  ch;
-    DWORD  mode;
-    DWORD  count;
-    HANDLE hstdin = GetStdHandle(STD_INPUT_HANDLE);
+//-------------------------------------------------------------------------
+// Function for handling signal events.  It will signal the stop event,
+// which stops everything and ends to program.
+//-------------------------------------------------------------------------
 
-    // Prompt the user
-    if (prompt == NULL)
+bool WINAPI ConsoleHandler(DWORD signal)
+{
+    if (signal == CTRL_C_EVENT ||
+        signal == CTRL_CLOSE_EVENT ||
+        signal == CTRL_LOGOFF_EVENT ||
+        signal == CTRL_SHUTDOWN_EVENT
+    )
     {
-        prompt = TEXT("Press any key to continue...");
+        SetEvent(g_stopEventHandle);
     }
 
-    WriteConsole(
-        GetStdHandle(STD_OUTPUT_HANDLE),
-        prompt,
-        lstrlen(prompt),
-        &count,
-        NULL
-    );
-
-    // Switch to raw mode
-    GetConsoleMode(hstdin, &mode);
-    SetConsoleMode(hstdin, 0);
-
-    // Wait for the user's response
-    WaitForSingleObject(hstdin, INFINITE);
-
-    // Read the (single) key pressed
-    ReadConsole(hstdin, &ch, 1, &count, NULL);
-
-    // Restore the console to its previous state
-    SetConsoleMode(hstdin, mode);
-
-    // Return the key code
-    return ch;
+    return true;
 }
 
-int wmain(int argc, wchar_t* argv[])
+int wmain(int argc, LPWSTR argv[])
 {
-    if (argc < 4)
+    if (argc < 3 || argc > 4)
     {
-        wprintf(L"Wrong number of arguments passed. Arguments needed are:\n");
+        wprintf(L"ERROR: Wrong number of arguments passed (at minimum, the first 2 are needed). Arguments needed are:\n");
         wprintf(L"\tArg1 - the name of the process including .exe in the name.\n");
         wprintf(L"\tArg2 - the name of the module (DLL) including .dll in the name.\n");
-        wprintf(L"\tArg3 - the action type to perform - valid values are DMP or TTD.\n");
+        wprintf(L"\tArg3 [opt] - the action type to perform - valid values are DMP or TTD - default is TTD.\n");
 
         return -1;
     }
 
+    LPWSTR actionType = (LPWSTR)malloc(sizeof(WCHAR) * 3);
+    StrCpy(actionType, TTD_ACTION);
+
+    if (argc == 4 &&
+        wcscmp(TTD_ACTION, argv[3]) != 0 &&
+        wcscmp(DBG_ACTION, argv[3]) != 0
+        )
+    {
+        wprintf(L"ERROR: Wrong value passed for the 3rd argument - available values are TTD or DBG - default if not passed is TTD.\n");
+
+        return -1;
+    }
+    else
+    {
+        StrCpy(actionType, argv[3]);
+    }
+
     LPWSTR processName = (LPWSTR)malloc(sizeof(WCHAR) * MAX_PATH);
     LPWSTR moduleName = (LPWSTR)malloc(sizeof(WCHAR) * MAX_PATH);
-    LPWSTR actionType = (LPWSTR)malloc(sizeof(WCHAR) * 3);
-
     StrCpy(processName, argv[1]);
     StrCpy(moduleName, argv[2]);
-    StrCpy(actionType, argv[3]);
 
     wprintf(L"Starting to monitor for Process: %s and Module: %s and Action: %s\n", processName, moduleName, actionType);
 
@@ -106,14 +103,17 @@ int wmain(int argc, wchar_t* argv[])
         return -1;
     }
 
-    // create instances of our trace session classes.  The xxInstance() calls
-    // perform some setup:
-    //     StartTrace(), EnableTraceEx2(), OpenTrace()
-    // If there are failures along the way, NULL pointer is returned.
+    g_stopEventHandle = CreateEvent(NULL, true, false, NULL);
+    if (g_stopEventHandle == NULL)
+    {
+        wprintf(L"ERROR: Failed to create event with error 0x%x", HRESULT_FROM_WIN32(GetLastError()));
 
-    KernelTraceSession* kernelTraceSession = KernelTraceInstance(processName, moduleName, actionType);
+        return -1;
+    }
 
-    if (!kernelTraceSession) {
+    KernelTraceSession* kernelTraceSession = KernelTraceInstance(processName, moduleName, actionType, g_stopEventHandle);
+
+    if (kernelTraceSession == NULL) {
         wprintf(L"Error: could not create a trace. kernel:0x%p\n", kernelTraceSession);
         return -1;
     }
@@ -121,21 +121,30 @@ int wmain(int argc, wchar_t* argv[])
     DWORD dwThreadIdKernel = 0;
     HANDLE kernelTraceThread = CreateThread(NULL, 0, KernelTraceThreadFunc, kernelTraceSession, 0, &dwThreadIdKernel);
 
-    WaitPressAnyKey(L"Press any key to stop ...\n");
+    if (!SetConsoleCtrlHandler((PHANDLER_ROUTINE)ConsoleHandler, true))
+    {
+        printf("ERROR: Could not set control handler with error 0x%x\n", GetLastError());
+        return -1;
+    }
 
-    // set a flag in each of our Trace Session classes, so that next time
-    // BufferCallback() are called, they return false.  This will instruct ETW
-    // to stop sending events.
+    wprintf(L"Press Ctrl+C to stop the program.\n");
+
+    switch (WaitForSingleObject(g_stopEventHandle, INFINITE))
+    {
+    case WAIT_OBJECT_0:
+        wprintf(L"Stop event was set ... stopping.\n");
+        break;
+
+    default:
+        wprintf(L"ERROR: WaitForMultipleObjects failed 0x%x\n", GetLastError());
+        break;
+    }
 
     kernelTraceSession->Stop();
 
-    // Give it a second...
-
     Sleep(1000);
 
-    // Finally, terminate the thread
-
-    TerminateThread(kernelTraceThread, 0);
+    TerminateThread(kernelTraceThread, NULL);
 
     return 0;
 }

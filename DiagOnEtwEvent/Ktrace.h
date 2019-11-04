@@ -69,7 +69,7 @@ public:
  *
  * Returns NULL if setup failed, instance otherwise.
  */
-KernelTraceSession* KernelTraceInstance(LPWSTR, LPWSTR, LPWSTR);
+KernelTraceSession* KernelTraceInstance(LPWSTR, LPWSTR, LPWSTR, HANDLE);
 
 class KernelTraceSessionImpl : public KernelTraceSession
 {
@@ -77,13 +77,15 @@ public:
     /*
      * constructor
      */
-    KernelTraceSessionImpl(LPWSTR processName, LPWSTR moduleName, LPWSTR actionType) : 
+    KernelTraceSessionImpl(LPWSTR processName, LPWSTR moduleName, LPWSTR actionType, HANDLE stopEvent) : 
         m_stopFlag(false),
         m_userPropLen(0),
         m_startTraceHandle(0L),
         m_processName(processName),
         m_moduleName(moduleName),
-        m_actionType(actionType)
+        m_actionType(actionType),
+        m_stopEvent(stopEvent),
+        m_petp(NULL)
     {}
 
     ~KernelTraceSessionImpl()
@@ -91,16 +93,19 @@ public:
         if (m_processName)
         {
             free(m_processName);
+            m_processName = NULL;
         }
 
         if (m_moduleName)
         {
             free(m_moduleName);
+            m_moduleName = NULL;
         }
 
         if (m_actionType)
         {
             free(m_actionType);
+            m_actionType = NULL;
         }
 
         if (m_startTraceHandle)
@@ -112,14 +117,28 @@ public:
                 printf("ControlTrace returned %ul\n", hr);
             }
         }
+
+        if (m_stopEvent)
+        {
+            CloseHandle(m_stopEvent);
+        }
     }
 
     virtual void Run();
-    virtual void Stop() { m_stopFlag = true; }
+
+    virtual void Stop()
+    {
+        m_stopFlag = true;
+
+        if (m_stopEvent != NULL)
+        {
+            SetEvent(m_stopEvent);
+        }
+    }
 
     bool Setup();
     void OnRecordEvent(PEVENT_RECORD);
-    BOOL OnBuffer(PEVENT_TRACE_LOGFILE);
+    bool OnBuffer(PEVENT_TRACE_LOGFILE);
     bool StartTraceSession(std::wstring, DWORD, TRACEHANDLE&);
 
 private:
@@ -133,4 +152,5 @@ private:
     LPWSTR m_moduleName;
     LPWSTR m_actionType;
     PEVENT_TRACE_PROPERTIES m_petp;
+    HANDLE m_stopEvent;
 };

@@ -4,6 +4,9 @@
 #include <Windows.h>
 #include <stdio.h>
 
+constexpr LPCWSTR TTD_ACTION = L"TTD";
+constexpr LPCWSTR DBG_ACTION = L"DBG";
+
 // https://docs.microsoft.com/en-us/windows/win32/etw/nt-kernel-logger-constants
 
 // https://docs.microsoft.com/en-us/windows/win32/etw/process

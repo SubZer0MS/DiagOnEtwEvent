@@ -137,8 +137,7 @@ void KernelTraceSessionImpl::OnRecordEvent(PEVENT_RECORD pEvent)
                         hr != ERROR_ACCESS_DENIED
                         )
                     {
-                        hr = HRESULT_FROM_WIN32(GetLastError());
-                        wprintf(L"OpenProcess returned 0x%x for PID %d\n", hr, processId);
+                        wprintf(L"OpenProcess returned 0x%x for PID %d\n", HRESULT_FROM_WIN32(hr), processId);
                     }
 
                     hr = ERROR_SUCCESS;
@@ -206,6 +205,7 @@ void KernelTraceSessionImpl::OnRecordEvent(PEVENT_RECORD pEvent)
                                 {
                                     hr = HRESULT_FROM_WIN32(err);
                                     wprintf(L"ERROR: Failed to create date time for file name with error 0x%x\n", hr);
+                                    Stop(); // considered critical failure and stopping
                                     goto cleanup;
                                 }
 
@@ -218,6 +218,7 @@ void KernelTraceSessionImpl::OnRecordEvent(PEVENT_RECORD pEvent)
                                 {
                                     hr = GetLastError();
                                     wprintf(L"ERROR: Failed to create the file for the memory dump with error 0x%x\n", HRESULT_FROM_WIN32(hr));
+                                    Stop(); // considered critical failure and stopping
                                     goto cleanup;
                                 }
 
@@ -233,6 +234,7 @@ void KernelTraceSessionImpl::OnRecordEvent(PEVENT_RECORD pEvent)
                                 {
                                     hr = GetLastError();
                                     wprintf(L"ERROR: Failed to write the memory dump with error 0x%x\n", HRESULT_FROM_WIN32(hr));
+                                    Stop(); // considered critical failure and stopping
                                     goto cleanup;
                                 }
 
@@ -262,6 +264,7 @@ void KernelTraceSessionImpl::OnRecordEvent(PEVENT_RECORD pEvent)
                                 if (hr != ERROR_SUCCESS)
                                 {
                                     wprintf(L"ERROR: Failed to create/open the TTD EULA registry key with error 0x%x\n", HRESULT_FROM_WIN32(hr));
+                                    Stop(); // considered critical failure and stopping
                                     goto cleanup;
                                 }
 
@@ -273,6 +276,7 @@ void KernelTraceSessionImpl::OnRecordEvent(PEVENT_RECORD pEvent)
                                 if (hr != ERROR_SUCCESS)
                                 {
                                     wprintf(L"ERROR: Failed to set EULASigned registry value for TTD EULA registry key with error 0x%x\n", HRESULT_FROM_WIN32(hr));
+                                    Stop(); // considered critical failure and stopping
                                     goto cleanup;
                                 }
 
@@ -302,6 +306,7 @@ void KernelTraceSessionImpl::OnRecordEvent(PEVENT_RECORD pEvent)
                                         wprintf(L"ERROR: Could not start the process with error 0x%x\n", HRESULT_FROM_WIN32(hr));
                                     }
 
+                                    Stop(); // considered critical failure and stopping
                                     goto cleanup;
                                 }
 
@@ -363,7 +368,7 @@ cleanup:
 // The only reason we implement this is to signal to ETW
 // to terminate this session's ProcessSession() loop.
 //---------------------------------------------------------------------
-BOOL KernelTraceSessionImpl::OnBuffer(PEVENT_TRACE_LOGFILE buf)
+bool KernelTraceSessionImpl::OnBuffer(PEVENT_TRACE_LOGFILE buf)
 {
     if (m_stopFlag)
     {
@@ -454,12 +459,14 @@ bool KernelTraceSessionImpl::Setup()
 {
     // This is where you wask for Process information, TCP, etc.  Look at StartTraceW() docs.
 
-    DWORD kernelTraceOptions = EVENT_TRACE_FLAG_IMAGE_LOAD; // EVENT_TRACE_FLAG_DISK_FILE_IO; // EVENT_TRACE_FLAG_PROCESS
+    DWORD kernelTraceOptions = EVENT_TRACE_FLAG_IMAGE_LOAD; // | EVENT_TRACE_FLAG_DISK_FILE_IO || EVENT_TRACE_FLAG_PROCESS;
 
     ULONG status = StartTraceSession(NT_LOGGER_SESSION_NAME, kernelTraceOptions, this->m_startTraceHandle);
 
     if (status == false)
+    {
         return false;
+    }
 
     // Identify the log file from which you want to consume events
     // and the callbacks used to process the events and buffers.
@@ -483,8 +490,7 @@ bool KernelTraceSessionImpl::Setup()
     this->m_startTraceHandle = OpenTrace(&trace);
     if (INVALID_PROCESSTRACE_HANDLE == this->m_startTraceHandle)
     {
-        DWORD err = GetLastError();
-        wprintf(L"KernelTraceSession: OpenTrace() failed with %lu\n", err);	// lookup in winerror.h
+        wprintf(L"KernelTraceSession: OpenTrace() failed with %lu\n", GetLastError());
         goto cleanup;
     }
 
@@ -510,7 +516,7 @@ DWORD KernelTraceSessionImpl::GetUserPropLen(PEVENT_RECORD pEvent)
 
     if (ERROR_INSUFFICIENT_BUFFER == status)
     {
-        pInfo = (TRACE_EVENT_INFO*)malloc(BufferSize);
+        pInfo = (PTRACE_EVENT_INFO)malloc(BufferSize);
         if (pInfo == NULL)
         {
             wprintf(L"Failed to allocate memory for event info (size=%lu).\n", BufferSize);
@@ -549,11 +555,14 @@ DWORD KernelTraceSessionImpl::GetUserPropLen(PEVENT_RECORD pEvent)
 //
 // Returns NULL if setup failed, instance otherwise.
 //---------------------------------------------------------------------
-KernelTraceSession* KernelTraceInstance(LPWSTR processName, LPWSTR moduleName, LPWSTR actionType) {
+KernelTraceSession* KernelTraceInstance(LPWSTR processName, LPWSTR moduleName, LPWSTR actionType, HANDLE stopEvent) {
 
-    if (gKernelTraceSession != 0L) return gKernelTraceSession;
+    if (gKernelTraceSession != NULL)
+    {
+        return gKernelTraceSession;
+    }
 
-    KernelTraceSessionImpl* obj = new KernelTraceSessionImpl(processName, moduleName, actionType);
+    KernelTraceSessionImpl* obj = new KernelTraceSessionImpl(processName, moduleName, actionType, stopEvent);
 
     if (obj->Setup() == false) {
         printf("KernelTraceSession Setup failed\n");
