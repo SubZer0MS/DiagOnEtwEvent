@@ -11,7 +11,7 @@
 
 #define MAX_NAME 256
 
-typedef LPTSTR(NTAPI* PIPV6ADDRTOSTRING)(const IN6_ADDR* Addr, LPTSTR S);
+typedef LPTSTR(NTAPI* PIPV6ADDRTOSTRING)(const PIN6_ADDR, LPTSTR);
 
 static PCWCHAR g_pSource[] = { L"XML instrumentation manifest", L"WMI MOF class", L"WPP TMF file" };
 

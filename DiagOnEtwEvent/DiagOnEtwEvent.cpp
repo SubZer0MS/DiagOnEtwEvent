@@ -1,8 +1,6 @@
 #include "DiagOnEtwEvent.h"
 #include "Ktrace.h"
 
-HANDLE g_stopEventHandle;
-
 //-------------------------------------------------------------------------
 // Function for kernel trace thread.  It will call Run(), which
 // calls ProcessTrace() Windows API call.
@@ -28,7 +26,7 @@ bool WINAPI ConsoleHandler(DWORD signal)
         signal == CTRL_SHUTDOWN_EVENT
     )
     {
-        SetEvent(g_stopEventHandle);
+        SetEvent(GetKernelTraceInstance()->GetStopEvent());
     }
 
     return true;
@@ -103,15 +101,15 @@ int wmain(int argc, LPWSTR argv[])
         return -1;
     }
 
-    g_stopEventHandle = CreateEvent(NULL, true, false, NULL);
-    if (g_stopEventHandle == NULL)
+    HANDLE stopEvent = CreateEvent(NULL, true, false, NULL);
+    if (stopEvent == NULL)
     {
         wprintf(L"ERROR: Failed to create event with error 0x%x", HRESULT_FROM_WIN32(GetLastError()));
 
         return -1;
     }
 
-    KernelTraceSession* kernelTraceSession = KernelTraceInstance(processName, moduleName, actionType, g_stopEventHandle);
+    KernelTraceSession* kernelTraceSession = KernelTraceInstance(processName, moduleName, actionType, stopEvent);
 
     if (kernelTraceSession == NULL) {
         wprintf(L"Error: could not create a trace. kernel:0x%p\n", kernelTraceSession);
@@ -129,7 +127,7 @@ int wmain(int argc, LPWSTR argv[])
 
     wprintf(L"Press Ctrl+C to stop the program.\n");
 
-    switch (WaitForSingleObject(g_stopEventHandle, INFINITE))
+    switch (WaitForSingleObject(stopEvent, INFINITE))
     {
     case WAIT_OBJECT_0:
         wprintf(L"Stop event was set ... stopping.\n");

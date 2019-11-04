@@ -2,7 +2,7 @@
 #include "Utils.h"
 #include "DiagOnEtwEvent.h"
 
-KernelTraceSessionImpl* gKernelTraceSession = 0L;
+static KernelTraceSessionImpl* pKernelTraceSession = NULL;
 
 //---------------------------------------------------------------------
 // Run()
@@ -186,139 +186,14 @@ void KernelTraceSessionImpl::OnRecordEvent(PEVENT_RECORD pEvent)
 
                             if (_wcsicmp(ACTION_DMP, m_actionType) == 0)
                             {
-                                wprintf(L"Writing full memory user dump ...\n");
-
-                                const DWORD Flags = 
-                                    MiniDumpWithFullMemory |
-                                    MiniDumpWithFullMemoryInfo |
-                                    MiniDumpWithHandleData |
-                                    MiniDumpWithUnloadedModules |
-                                    MiniDumpWithThreadInfo;
-
-                                WCHAR dumpFileTime[MAX_PATH];
-                                dumpFileTime[0] = '\0';
-                                struct tm timenow;
-                                __int64 ltime;
-                                _time64(&ltime);
-                                errno_t err = gmtime_s(&timenow, &ltime);
-                                if (err)
-                                {
-                                    hr = HRESULT_FROM_WIN32(err);
-                                    wprintf(L"ERROR: Failed to create date time for file name with error 0x%x\n", hr);
-                                    Stop(); // considered critical failure and stopping
-                                    goto cleanup;
-                                }
-
-                                wcsftime(dumpFileTime, MAX_PATH, L"%Y_%m_%d_%H_%M_%S", &timenow);
-                                WCHAR dumpFileName[MAX_PATH];
-                                StringCbPrintf(dumpFileName, MAX_PATH, L"%s_%s.dmp", processName, dumpFileTime);
-                                
-                                hFile = CreateFile(dumpFileName, GENERIC_ALL, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-                                if (hFile == NULL)
-                                {
-                                    hr = GetLastError();
-                                    wprintf(L"ERROR: Failed to create the file for the memory dump with error 0x%x\n", HRESULT_FROM_WIN32(hr));
-                                    Stop(); // considered critical failure and stopping
-                                    goto cleanup;
-                                }
-
-                                if (!MiniDumpWriteDump(
-                                    hProcess,
-                                    processId,
-                                    hFile,
-                                    (MINIDUMP_TYPE)Flags,
-                                    nullptr,
-                                    nullptr,
-                                    nullptr)
-                                    )
-                                {
-                                    hr = GetLastError();
-                                    wprintf(L"ERROR: Failed to write the memory dump with error 0x%x\n", HRESULT_FROM_WIN32(hr));
-                                    Stop(); // considered critical failure and stopping
-                                    goto cleanup;
-                                }
-
-                                wprintf(L"Memory dump file was successfully written to: %s\n", dumpFileName);
-
-                                Stop();
+                                hr = DoActionDbg(hProcess, processId, processName);
                             }
                             else if (_wcsicmp(ACTION_TTD, m_actionType) == 0)
                             {
-                                STARTUPINFO si;
-                                PROCESS_INFORMATION pi;
-                                ZeroMemory(&si, sizeof(si));
-                                si.cb = sizeof(si);
-                                ZeroMemory(&pi, sizeof(pi));
-
-                                commandLine = (LPWSTR)malloc(sizeof(WCHAR) * MAX_PATH);
-                                commandLine[0] = '\0';
-                                wcscat_s(commandLine, MAX_PATH, TTD_DEFAULT_CMDLINE);
-
-                                WCHAR processIdString[10];
-                                _ultow_s(processId, processIdString, 10, 10);
-                                wcscat_s(commandLine, MAX_PATH, processIdString);
-
-                                LPDWORD result = 0;
-                                HKEY registryKey = NULL;
-                                hr = RegCreateKeyEx(HKEY_USERS, TTD_REGISTRY_PATH, 0, NULL, NULL, KEY_ALL_ACCESS, NULL, &registryKey, result);
-                                if (hr != ERROR_SUCCESS)
-                                {
-                                    wprintf(L"ERROR: Failed to create/open the TTD EULA registry key with error 0x%x\n", HRESULT_FROM_WIN32(hr));
-                                    Stop(); // considered critical failure and stopping
-                                    goto cleanup;
-                                }
-
-                                DWORD value = 1;
-                                hr = RegSetValueEx(registryKey, TTD_REGISTRY_EULA_KEY, 0, REG_DWORD, (const BYTE*)&value, sizeof(value));
-
-                                RegCloseKey(registryKey);
-
-                                if (hr != ERROR_SUCCESS)
-                                {
-                                    wprintf(L"ERROR: Failed to set EULASigned registry value for TTD EULA registry key with error 0x%x\n", HRESULT_FROM_WIN32(hr));
-                                    Stop(); // considered critical failure and stopping
-                                    goto cleanup;
-                                }
-
-                                wprintf(L"Attaching TTD ... with command line: %s\n", commandLine);
-
-                                if (!CreateProcess(
-                                    TTD_PROCESS_NAME,    // Process name
-                                    commandLine,    // Command line
-                                    NULL,    // Process handle not inheritable
-                                    NULL,    // Thread handle not inheritable
-                                    FALSE,   // Set handle inheritance to FALSE
-                                    0,       // No creation flags
-                                    NULL,    // Use parent's environment block
-                                    NULL,    // Use parent's starting directory 
-                                    &si,     // Pointer to STARTUPINFO structure
-                                    &pi      // Pointer to PROCESS_INFORMATION structure
-                                ))
-                                {
-                                    hr = GetLastError();
-
-                                    if (hr == ERROR_FILE_NOT_FOUND)
-                                    {
-                                        wprintf(L"ERROR: This program (executable) needs to be in the same folder as TTTRacer.exe and its dependent files.\n");
-                                    }
-                                    else
-                                    {
-                                        wprintf(L"ERROR: Could not start the process with error 0x%x\n", HRESULT_FROM_WIN32(hr));
-                                    }
-
-                                    Stop(); // considered critical failure and stopping
-                                    goto cleanup;
-                                }
-
-                                // Wait until child process exits.
-                                WaitForSingleObject(pi.hProcess, INFINITE);
-
-                                // Close process and thread handles. 
-                                CloseHandle(pi.hProcess);
-                                CloseHandle(pi.hThread);
-
-                                Stop();
+                                hr = DoActionTtd(processId);
                             }
+
+                            wprintf(L"Last action that set the HR, set it to a value of 0x%x - if there was not other error message, this might be expected.\n", HRESULT_FROM_WIN32(hr));
                         }
                     }
                 }
@@ -331,6 +206,7 @@ cleanup:
     if (pInfo)
     {
         free(pInfo);
+        pInfo = NULL;
     }
 
     if (pData)
@@ -345,20 +221,166 @@ cleanup:
         pMapInfo = NULL;
     }
 
-    if (commandLine)
-    {
-        free(commandLine);
-    }
-
     if (hProcess)
     {
         CloseHandle(hProcess);
+        hProcess = NULL;
     }
+}
+
+HRESULT KernelTraceSessionImpl::DoActionTtd(DWORD processId)
+{
+    HRESULT hr = ERROR_SUCCESS;
+    DWORD regKeyValue = 1;
+    STARTUPINFO si;
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    ZeroMemory(&pi, sizeof(pi));
+
+    LPWSTR commandLine = (LPWSTR)malloc(sizeof(WCHAR) * MAX_PATH);
+    commandLine[0] = '\0';
+    wcscat_s(commandLine, MAX_PATH, TTD_DEFAULT_CMDLINE);
+
+    WCHAR processIdString[10];
+    _ultow_s(processId, processIdString, 10, 10);
+    wcscat_s(commandLine, MAX_PATH, processIdString);
+
+    LPDWORD result = 0;
+    HKEY registryKey = NULL;
+    hr = RegCreateKeyEx(HKEY_USERS, TTD_REGISTRY_PATH, 0, NULL, NULL, KEY_ALL_ACCESS, NULL, &registryKey, result);
+    if (hr != ERROR_SUCCESS)
+    {
+        wprintf(L"ERROR: Failed to create/open the TTD EULA registry key with error 0x%x\n", HRESULT_FROM_WIN32(hr));
+        goto cleanup;
+    }
+
+    hr = RegSetValueEx(registryKey, TTD_REGISTRY_EULA_KEY, 0, REG_DWORD, (const PBYTE)&regKeyValue, sizeof(regKeyValue));
+
+    RegCloseKey(registryKey);
+
+    if (hr != ERROR_SUCCESS)
+    {
+        wprintf(L"ERROR: Failed to set EULASigned registry value for TTD EULA registry key with error 0x%x\n", HRESULT_FROM_WIN32(hr));
+        goto cleanup;
+    }
+
+    wprintf(L"Attaching TTD ... with command line: %s\n", commandLine);
+
+    if (!CreateProcess(
+        TTD_PROCESS_NAME,    // Process name
+        commandLine,    // Command line
+        NULL,    // Process handle not inheritable
+        NULL,    // Thread handle not inheritable
+        FALSE,   // Set handle inheritance to FALSE
+        0,       // No creation flags
+        NULL,    // Use parent's environment block
+        NULL,    // Use parent's starting directory 
+        &si,     // Pointer to STARTUPINFO structure
+        &pi      // Pointer to PROCESS_INFORMATION structure
+    ))
+    {
+        hr = GetLastError();
+
+        if (hr == ERROR_FILE_NOT_FOUND)
+        {
+            wprintf(L"ERROR: This program (executable) needs to be in the same folder as TTTRacer.exe and its dependent files.\n");
+        }
+        else
+        {
+            wprintf(L"ERROR: Could not start the process with error 0x%x\n", HRESULT_FROM_WIN32(hr));
+        }
+
+        goto cleanup;
+    }
+
+    // Wait until child process exits.
+    WaitForSingleObject(pi.hProcess, INFINITE);
+
+    // Close process and thread handles. 
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+
+cleanup:
+
+    if (commandLine)
+    {
+        free(commandLine);
+        commandLine = NULL;
+    }
+
+    Stop();
+
+    return hr;
+}
+
+HRESULT KernelTraceSessionImpl::DoActionDbg(HANDLE hProcess, DWORD processId, LPCWSTR processName)
+{
+    wprintf(L"Writing full memory user dump ...\n");
+
+    HRESULT hr = ERROR_SUCCESS;
+    HANDLE hFile = NULL;
+
+    const DWORD Flags =
+        MiniDumpWithFullMemory |
+        MiniDumpWithFullMemoryInfo |
+        MiniDumpWithHandleData |
+        MiniDumpWithUnloadedModules |
+        MiniDumpWithThreadInfo;
+
+    WCHAR dumpFileTime[MAX_PATH];
+    dumpFileTime[0] = '\0';
+    struct tm timenow;
+    __int64 ltime;
+    _time64(&ltime);
+    errno_t err = gmtime_s(&timenow, &ltime);
+    if (err)
+    {
+        hr = HRESULT_FROM_WIN32(err);
+        wprintf(L"ERROR: Failed to create date time for file name with error 0x%x\n", hr);
+        goto cleanup;
+    }
+
+    wcsftime(dumpFileTime, MAX_PATH, L"%Y_%m_%d_%H_%M_%S", &timenow);
+    WCHAR dumpFileName[MAX_PATH];
+    StringCbPrintf(dumpFileName, MAX_PATH, L"%s_%s.dmp", processName, dumpFileTime);
+
+    hFile = CreateFile(dumpFileName, GENERIC_ALL, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hFile == NULL)
+    {
+        hr = GetLastError();
+        wprintf(L"ERROR: Failed to create the file for the memory dump with error 0x%x\n", HRESULT_FROM_WIN32(hr));
+        goto cleanup;
+    }
+
+    if (!MiniDumpWriteDump(
+        hProcess,
+        processId,
+        hFile,
+        (MINIDUMP_TYPE)Flags,
+        nullptr,
+        nullptr,
+        nullptr)
+        )
+    {
+        hr = GetLastError();
+        wprintf(L"ERROR: Failed to write the memory dump with error 0x%x\n", HRESULT_FROM_WIN32(hr));
+        goto cleanup;
+    }
+
+    wprintf(L"Memory dump file was successfully written to: %s\n", dumpFileName);
+
+cleanup:
 
     if (hFile)
     {
         CloseHandle(hFile);
+        hFile = NULL;
     }
+
+    Stop();
+
+    return hr;
 }
 
 //---------------------------------------------------------------------
@@ -409,14 +431,14 @@ bool KernelTraceSessionImpl::StartTraceSession(std::wstring mySessionName, DWORD
         if (hr != ERROR_SUCCESS)
         {
             printf("ControlTrace returned %ul\n", hr);
-            traceSessionHandle = 0L;
+            traceSessionHandle = NULL;
             return false;
         }
     }
     else if (hr != ERROR_SUCCESS)
     {
         printf("StartTraceW returned %ul\n", hr);
-        traceSessionHandle = 0L;
+        traceSessionHandle = NULL;
         return false;
     }
     else
@@ -425,7 +447,7 @@ bool KernelTraceSessionImpl::StartTraceSession(std::wstring mySessionName, DWORD
         if (hr != ERROR_SUCCESS)
         {
             printf("EnableTraceEx2 returned %ul\n", hr);
-            traceSessionHandle = 0L;
+            traceSessionHandle = NULL;
             return false;
         }
     }
@@ -436,19 +458,27 @@ bool KernelTraceSessionImpl::StartTraceSession(std::wstring mySessionName, DWORD
 //---------------------------------------------------------------------
 // Function wrapper to call our class OnRecordEvent()
 //---------------------------------------------------------------------
-static VOID WINAPI StaticRecordEventCallback(PEVENT_RECORD pEvent)
+static void WINAPI StaticRecordEventCallback(PEVENT_RECORD pEvent)
 {
-    if (0L == gKernelTraceSession) return;
-    gKernelTraceSession->OnRecordEvent(pEvent);
+    if (NULL == pKernelTraceSession)
+    {
+        return;
+    }
+
+    pKernelTraceSession->OnRecordEvent(pEvent);
 }
 
 //---------------------------------------------------------------------
 // Function wrapper to call our class OnBuffer()
 //---------------------------------------------------------------------
-static BOOL WINAPI StaticBufferEventCallback(PEVENT_TRACE_LOGFILE buf)
+static bool WINAPI StaticBufferEventCallback(PEVENT_TRACE_LOGFILE buf)
 {
-    if (0L == gKernelTraceSession) return FALSE;
-    return gKernelTraceSession->OnBuffer(buf);
+    if (NULL == pKernelTraceSession)
+    {
+        return false;
+    }
+
+    return pKernelTraceSession->OnBuffer(buf);
 }
 
 //---------------------------------------------------------------------
@@ -497,7 +527,9 @@ bool KernelTraceSessionImpl::Setup()
     return true;
 
 cleanup:
+
     CloseTrace(this->m_startTraceHandle);
+
     return false;
 }
 
@@ -555,22 +587,35 @@ DWORD KernelTraceSessionImpl::GetUserPropLen(PEVENT_RECORD pEvent)
 //
 // Returns NULL if setup failed, instance otherwise.
 //---------------------------------------------------------------------
-KernelTraceSession* KernelTraceInstance(LPWSTR processName, LPWSTR moduleName, LPWSTR actionType, HANDLE stopEvent) {
+KernelTraceSession* KernelTraceInstance(LPWSTR processName, LPWSTR moduleName, LPWSTR actionType, HANDLE stopEvent)
+{
 
-    if (gKernelTraceSession != NULL)
+    if (pKernelTraceSession != NULL)
     {
-        return gKernelTraceSession;
+        return pKernelTraceSession;
     }
 
     KernelTraceSessionImpl* obj = new KernelTraceSessionImpl(processName, moduleName, actionType, stopEvent);
 
-    if (obj->Setup() == false) {
+    if (obj->Setup() == false)
+    {
         printf("KernelTraceSession Setup failed\n");
         delete obj;
-        return 0L;
+        
+        return NULL;
     }
 
-    gKernelTraceSession = obj;
+    pKernelTraceSession = obj;
 
     return obj;
+}
+
+//---------------------------------------------------------------------
+// GetKernelTraceInstance()
+// KernelTraceSession is a singleton and returns the existing instance.
+// Returns NULL if setup failed, instance otherwise.
+//---------------------------------------------------------------------
+KernelTraceSession* GetKernelTraceInstance()
+{
+    return pKernelTraceSession;
 }

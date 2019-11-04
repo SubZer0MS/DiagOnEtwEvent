@@ -61,6 +61,11 @@ public:
      */
     virtual void Stop() = 0;
 
+    /*
+     * GetStopEvent()
+     * Will return the Event that can be signeled to stop the trace
+     */
+    virtual HANDLE GetStopEvent() = 0;
 };
 
 /**
@@ -70,6 +75,7 @@ public:
  * Returns NULL if setup failed, instance otherwise.
  */
 KernelTraceSession* KernelTraceInstance(LPWSTR, LPWSTR, LPWSTR, HANDLE);
+KernelTraceSession* GetKernelTraceInstance();
 
 class KernelTraceSessionImpl : public KernelTraceSession
 {
@@ -140,6 +146,12 @@ public:
     void OnRecordEvent(PEVENT_RECORD);
     bool OnBuffer(PEVENT_TRACE_LOGFILE);
     bool StartTraceSession(std::wstring, DWORD, TRACEHANDLE&);
+    HRESULT DoActionDbg(HANDLE, DWORD, LPCWSTR);
+    HRESULT DoActionTtd(DWORD);
+    HANDLE GetStopEvent()
+    {
+        return m_stopEvent;
+    }
 
 private:
 
