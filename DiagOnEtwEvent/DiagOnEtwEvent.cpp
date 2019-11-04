@@ -134,7 +134,7 @@ int wmain(int argc, LPWSTR argv[])
         break;
 
     default:
-        wprintf(L"ERROR: WaitForMultipleObjects failed 0x%x\n", GetLastError());
+        wprintf(L"ERROR: WaitForSingleObject failed 0x%x\n", GetLastError());
         break;
     }
 
