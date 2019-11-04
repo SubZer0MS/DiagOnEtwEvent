@@ -141,6 +141,7 @@ void KernelTraceSessionImpl::OnRecordEvent(PEVENT_RECORD pEvent)
                         wprintf(L"OpenProcess returned 0x%x for PID %d\n", hr, processId);
                     }
 
+                    hr = ERROR_SUCCESS;
                     goto cleanup;
                 }
 
@@ -158,6 +159,8 @@ void KernelTraceSessionImpl::OnRecordEvent(PEVENT_RECORD pEvent)
                         goto cleanup;
                     }
                 }
+
+                //wprintf(L"Process is: %s and module is: %s", processName, fileName);
 
                 if (processName != NULL && fileName != NULL)
                 {
@@ -350,11 +353,6 @@ cleanup:
     if (hFile)
     {
         CloseHandle(hFile);
-    }
-
-    if (hr != ERROR_SUCCESS)
-    {
-        Stop();
     }
 }
 
