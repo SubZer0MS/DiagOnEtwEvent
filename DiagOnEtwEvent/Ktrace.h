@@ -20,6 +20,8 @@
 #pragma comment(lib, "Shlwapi.lib")
 #pragma comment (lib, "dbghelp.lib")
 
+#include "Utils.h"
+
 constexpr LPCWSTR ACTION_TTD = L"TTD";
 constexpr LPCWSTR ACTION_DMP = L"DMP";
 constexpr LPCWSTR TTD_REGISTRY_PATH = L".DEFAULT\\Software\\Microsoft\\TTT";
@@ -175,6 +177,12 @@ private:
     // Calculates the length of user data properties that precede packet data.
     //---------------------------------------------------------------------
     DWORD GetUserPropLen(PEVENT_RECORD);
+
+    //---------------------------------------------------------------------
+    // OnRecordEventHandleImageLoad()
+    // Specifically handles Image Load events
+    //---------------------------------------------------------------------
+    void OnRecordEventHandleImageLoad(PEVENT_RECORD, PTRACE_EVENT_INFO);
 
     bool m_stopFlag;
     TRACEHANDLE  m_startTraceHandle;

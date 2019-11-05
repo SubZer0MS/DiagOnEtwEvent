@@ -1,5 +1,4 @@
 #include "Ktrace.h"
-#include "Utils.h"
 
 static KernelTraceSessionImpl* pKernelTraceSession = NULL;
 
@@ -21,15 +20,6 @@ void KernelTraceSessionImpl::OnRecordEvent(PEVENT_RECORD pEvent)
 {
     HRESULT hr = ERROR_SUCCESS;
     PTRACE_EVENT_INFO pInfo = NULL;
-    USHORT ArraySize = 0;
-    PEVENT_MAP_INFO pMapInfo = NULL;
-    PROPERTY_DATA_DESCRIPTOR DataDescriptors[1];
-    ULONG DescriptorsCount = 0;
-    DWORD PropertySize = 0;
-    PBYTE pData = NULL;
-    HANDLE hProcess = NULL;
-    LPWSTR commandLine = NULL;
-    HANDLE hFile = NULL;
 
     //PrintEventMetadataWithProperties(pEvent);
 
@@ -48,146 +38,7 @@ void KernelTraceSessionImpl::OnRecordEvent(PEVENT_RECORD pEvent)
         if (pInfo->EventDescriptor.Opcode == EVENT_TRACE_TYPE_DC_START ||
             pInfo->EventDescriptor.Opcode == EVENT_TRACE_TYPE_LOAD)
         {
-            if (wcscmp(L"ProcessId", ((LPWSTR)((PBYTE)(pInfo)+pInfo->EventPropertyInfoArray[Image_Load::ProcessId].NameOffset))) == 0 &&
-                wcscmp(L"FileName", ((LPWSTR)((PBYTE)(pInfo)+pInfo->EventPropertyInfoArray[Image_Load::FileName].NameOffset))) == 0
-                )
-            {
-                hr = GetArraySize(pEvent, pInfo, 1, &ArraySize);
-                if (ERROR_SUCCESS != hr)
-                {
-                    wprintf(L"GetArraySize failed with %lu\n", hr);
-                    goto cleanup;
-                }
-
-                ZeroMemory(&DataDescriptors, sizeof(DataDescriptors));
-                DataDescriptors[0].PropertyName = (ULONGLONG)((PBYTE)(pInfo)+pInfo->EventPropertyInfoArray[Image_Load::FileName].NameOffset);
-                DataDescriptors[0].ArrayIndex = 0;
-                DescriptorsCount = 1;
-
-                hr = TdhGetPropertySize(pEvent, 0, NULL, DescriptorsCount, &DataDescriptors[0], &PropertySize);
-
-                if (ERROR_SUCCESS != hr)
-                {
-                    wprintf(L"TdhGetPropertySize failed with %lu\n", hr);
-                    goto cleanup;
-                }
-
-                pData = (PBYTE)malloc(PropertySize);
-
-                if (NULL == pData)
-                {
-                    wprintf(L"Failed to allocate memory for property data\n");
-                    hr = ERROR_OUTOFMEMORY;
-                    goto cleanup;
-                }
-
-                hr = TdhGetProperty(pEvent, 0, NULL, DescriptorsCount, &DataDescriptors[0], PropertySize, pData);
-
-                LPWSTR fileName = PathFindFileName((LPWSTR)pData);
-
-                DataDescriptors[0].PropertyName = (ULONGLONG)((PBYTE)(pInfo)+pInfo->EventPropertyInfoArray[Image_Load::ProcessId].NameOffset);
-
-                hr = TdhGetPropertySize(pEvent, 0, NULL, DescriptorsCount, &DataDescriptors[0], &PropertySize);
-                if (ERROR_SUCCESS != hr)
-                {
-                    wprintf(L"TdhGetPropertySize failed with %lu\n", hr);
-                    goto cleanup;
-                }
-
-                PBYTE pDataTmp = (PBYTE)realloc(pData, PropertySize);
-                if (NULL == pDataTmp)
-                {
-                    wprintf(L"Failed to allocate memory for property data\n");
-                    hr = HRESULT_FROM_WIN32(ERROR_OUTOFMEMORY);
-                    goto cleanup;
-                }
-                else
-                {
-                    pData = pDataTmp;
-                    pDataTmp = NULL;
-                }
-
-                if (NULL == pData)
-                {
-                    wprintf(L"Failed to allocate memory for property data\n");
-                    hr = ERROR_OUTOFMEMORY;
-                    goto cleanup;
-                }
-
-                hr = TdhGetProperty(pEvent, 0, NULL, DescriptorsCount, &DataDescriptors[0], PropertySize, pData);
-
-                UINT32 processId = *(PULONG)pData;
-
-                hProcess = OpenProcess(PROCESS_ALL_ACCESS, TRUE, processId);
-                if (hProcess == NULL)
-                {
-                    // we'll skip output of processes that already dissapered or system protected ones
-                    hr = GetLastError();
-                    if (hr != ERROR_INVALID_PARAMETER &&
-                        hr != ERROR_ACCESS_DENIED
-                        )
-                    {
-                        wprintf(L"OpenProcess returned 0x%x for PID %d\n", HRESULT_FROM_WIN32(hr), processId);
-                    }
-
-                    hr = ERROR_SUCCESS;
-                    goto cleanup;
-                }
-
-                WCHAR filePath[MAX_PATH + 1];
-                hr = GetModuleFileNameEx(hProcess, NULL, filePath, MAX_PATH + 1);
-
-                LPCWSTR processName = NULL;
-                if (hr != NULL)
-                {
-                    processName = PathFindFileName(filePath);
-                    if (hr == NULL)
-                    {
-                        hr = HRESULT_FROM_WIN32(GetLastError());
-                        wprintf(L"PathFindFileName failed: 0x%x\n", hr);
-                        goto cleanup;
-                    }
-                }
-
-                //wprintf(L"Process is: %s and module is: %s", processName, fileName);
-
-                if (processName != NULL && fileName != NULL)
-                {
-                    LPWSTR fileExtension = PathFindExtension(fileName);
-
-                    if (_wcsicmp(fileExtension, L".dll") == 0 &&
-                        _wcsicmp(processName, m_processName) == 0
-                        )
-                    {
-                        std::wstring rawName(fileName);
-                        rawName = rawName.substr(0, rawName.find_last_of(L"."));
-
-                        // we need to verify if this will load a pre-compiled (ni - native compiled) managed DLL
-                        if (_wcsicmp(PathFindExtension(rawName.c_str()), L".ni") == 0)
-                        {
-                            rawName = rawName.substr(0, rawName.find_last_of(L"."));
-                        }
-
-                        std::wstring rawModule(m_moduleName);
-
-                        if (_wcsicmp(rawName.c_str(), rawModule.substr(0, rawModule.find_last_of(L".")).c_str()) == 0)
-                        {
-                            wprintf(L"Found process %s and module %s and performing action %s\n", processName, fileName, m_actionType);
-
-                            if (_wcsicmp(ACTION_DMP, m_actionType) == 0)
-                            {
-                                hr = DoActionDbg(hProcess, processId, processName);
-                            }
-                            else if (_wcsicmp(ACTION_TTD, m_actionType) == 0)
-                            {
-                                hr = DoActionTtd(processId);
-                            }
-
-                            wprintf(L"Last action that set the HR, set it to a value of 0x%x - if there was not other error message, this might be expected.\n", hr);
-                        }
-                    }
-                }
-            }
+            OnRecordEventHandleImageLoad(pEvent, pInfo);
         }
     }
 
@@ -198,6 +49,162 @@ cleanup:
         free(pInfo);
         pInfo = NULL;
     }
+}
+
+void KernelTraceSessionImpl::OnRecordEventHandleImageLoad(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo)
+{
+    HRESULT hr = ERROR_SUCCESS;
+    USHORT ArraySize = 0;
+    PEVENT_MAP_INFO pMapInfo = NULL;
+    PROPERTY_DATA_DESCRIPTOR DataDescriptors[1];
+    ULONG DescriptorsCount = 0;
+    DWORD PropertySize = 0;
+    PBYTE pData = NULL;
+    HANDLE hProcess = NULL;
+
+    if (wcscmp(L"ProcessId", ((LPWSTR)((PBYTE)(pInfo)+pInfo->EventPropertyInfoArray[Image_Load::ProcessId].NameOffset))) == 0 &&
+        wcscmp(L"FileName", ((LPWSTR)((PBYTE)(pInfo)+pInfo->EventPropertyInfoArray[Image_Load::FileName].NameOffset))) == 0
+        )
+    {
+        hr = GetArraySize(pEvent, pInfo, 1, &ArraySize);
+        if (ERROR_SUCCESS != hr)
+        {
+            wprintf(L"GetArraySize failed with %lu\n", hr);
+            goto cleanup;
+        }
+
+        ZeroMemory(&DataDescriptors, sizeof(DataDescriptors));
+        DataDescriptors[0].PropertyName = (ULONGLONG)((PBYTE)(pInfo)+pInfo->EventPropertyInfoArray[Image_Load::FileName].NameOffset);
+        DataDescriptors[0].ArrayIndex = 0;
+        DescriptorsCount = 1;
+
+        hr = TdhGetPropertySize(pEvent, 0, NULL, DescriptorsCount, &DataDescriptors[0], &PropertySize);
+
+        if (ERROR_SUCCESS != hr)
+        {
+            wprintf(L"TdhGetPropertySize failed with %lu\n", hr);
+            goto cleanup;
+        }
+
+        pData = (PBYTE)malloc(PropertySize);
+
+        if (NULL == pData)
+        {
+            wprintf(L"Failed to allocate memory for property data\n");
+            hr = ERROR_OUTOFMEMORY;
+            goto cleanup;
+        }
+
+        hr = TdhGetProperty(pEvent, 0, NULL, DescriptorsCount, &DataDescriptors[0], PropertySize, pData);
+
+        LPWSTR fileName = PathFindFileName((LPWSTR)pData);
+
+        DataDescriptors[0].PropertyName = (ULONGLONG)((PBYTE)(pInfo)+pInfo->EventPropertyInfoArray[Image_Load::ProcessId].NameOffset);
+
+        hr = TdhGetPropertySize(pEvent, 0, NULL, DescriptorsCount, &DataDescriptors[0], &PropertySize);
+        if (ERROR_SUCCESS != hr)
+        {
+            wprintf(L"TdhGetPropertySize failed with %lu\n", hr);
+            goto cleanup;
+        }
+
+        PBYTE pDataTmp = (PBYTE)realloc(pData, PropertySize);
+        if (NULL == pDataTmp)
+        {
+            wprintf(L"Failed to allocate memory for property data\n");
+            hr = HRESULT_FROM_WIN32(ERROR_OUTOFMEMORY);
+            goto cleanup;
+        }
+        else
+        {
+            pData = pDataTmp;
+            pDataTmp = NULL;
+        }
+
+        if (NULL == pData)
+        {
+            wprintf(L"Failed to allocate memory for property data\n");
+            hr = ERROR_OUTOFMEMORY;
+            goto cleanup;
+        }
+
+        hr = TdhGetProperty(pEvent, 0, NULL, DescriptorsCount, &DataDescriptors[0], PropertySize, pData);
+
+        UINT32 processId = *(PULONG)pData;
+
+        hProcess = OpenProcess(PROCESS_ALL_ACCESS, TRUE, processId);
+        if (hProcess == NULL)
+        {
+            // we'll skip output of processes that already dissapered or system protected ones
+            hr = GetLastError();
+            if (hr != ERROR_INVALID_PARAMETER &&
+                hr != ERROR_ACCESS_DENIED
+                )
+            {
+                wprintf(L"OpenProcess returned 0x%x for PID %d\n", HRESULT_FROM_WIN32(hr), processId);
+            }
+
+            hr = ERROR_SUCCESS;
+            goto cleanup;
+        }
+
+        WCHAR filePath[MAX_PATH + 1];
+        hr = GetModuleFileNameEx(hProcess, NULL, filePath, MAX_PATH + 1);
+
+        LPCWSTR processName = NULL;
+        if (hr != NULL)
+        {
+            processName = PathFindFileName(filePath);
+            if (hr == NULL)
+            {
+                hr = HRESULT_FROM_WIN32(GetLastError());
+                wprintf(L"PathFindFileName failed: 0x%x\n", hr);
+                goto cleanup;
+            }
+        }
+
+        //wprintf(L"Process is: %s and module is: %s", processName, fileName);
+
+        if (processName != NULL && fileName != NULL)
+        {
+            LPWSTR fileExtension = PathFindExtension(fileName);
+
+            if (_wcsicmp(fileExtension, L".dll") == 0 &&
+                _wcsicmp(processName, m_processName) == 0
+                )
+            {
+                std::wstring rawName(fileName);
+                rawName = rawName.substr(0, rawName.find_last_of(L"."));
+
+                // we need to verify if this will load a pre-compiled (ni - native compiled) managed DLL
+                if (_wcsicmp(PathFindExtension(rawName.c_str()), L".ni") == 0)
+                {
+                    rawName = rawName.substr(0, rawName.find_last_of(L"."));
+                }
+
+                std::wstring rawModule(m_moduleName);
+
+                if (_wcsicmp(rawName.c_str(), rawModule.substr(0, rawModule.find_last_of(L".")).c_str()) == 0)
+                {
+                    wprintf(L"Found process %s and module %s and performing action %s\n", processName, fileName, m_actionType);
+
+                    if (_wcsicmp(ACTION_DMP, m_actionType) == 0)
+                    {
+                        hr = DoActionDbg(hProcess, processId, processName);
+                    }
+                    else if (_wcsicmp(ACTION_TTD, m_actionType) == 0)
+                    {
+                        hr = DoActionTtd(processId);
+                    }
+
+                    wprintf(L"Last action that set the HR, set it to a value of 0x%x - if there was not other error message, this might be expected.\n", hr);
+                }
+            }
+        }
+    }
+
+
+cleanup:
 
     if (pData)
     {
