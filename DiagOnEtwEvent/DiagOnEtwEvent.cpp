@@ -24,7 +24,7 @@ bool WINAPI ConsoleHandler(DWORD signal)
         signal == CTRL_CLOSE_EVENT ||
         signal == CTRL_LOGOFF_EVENT ||
         signal == CTRL_SHUTDOWN_EVENT
-    )
+        )
     {
         SetEvent(GetKernelTraceInstance()->GetStopEvent());
     }
@@ -43,6 +43,11 @@ int wmain(int argc, LPWSTR argv[])
 
         return -1;
     }
+
+    DWORD dwThreadIdKernel = 0;
+    HANDLE kernelTraceThread = NULL;
+    HANDLE stopEvent;
+    KernelTraceSession* kernelTraceSession = NULL;
 
     LPWSTR actionType = (LPWSTR)malloc(sizeof(WCHAR) * 3);
     StrCpy(actionType, TTD_ACTION);
@@ -68,61 +73,69 @@ int wmain(int argc, LPWSTR argv[])
 
     wprintf(L"Starting to monitor for Process: %s and Module: %s and Action: %s\n", processName, moduleName, actionType);
 
-    HANDLE hToken = 0;
+    HANDLE hToken = NULL;
     if (OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken))
     {
+        TOKEN_ELEVATION elevation;
+        DWORD cbSize = sizeof(TOKEN_ELEVATION);
+        if (GetTokenInformation(hToken, TokenElevation, &elevation, sizeof(elevation), &cbSize))
+        {
+            if (!elevation.TokenIsElevated)
+            {
+                wprintf(L"ERROR: This process must be executed from an elevated prompt.\n");
+                goto cleanup;
+            }
+        }
+        else
+        {
+            wprintf(L"ERROR: Failed to get token information with error 0x%x.\n", GetLastError());
+            goto cleanup;
+        }
+
         TOKEN_PRIVILEGES tkp;
         memset(&tkp, 0, sizeof(tkp));
         tkp.PrivilegeCount = 1;
         tkp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-        LookupPrivilegeValue(NULL, SE_SYSTEM_PROFILE_NAME, &tkp.Privileges[0].Luid);
 
-        AdjustTokenPrivileges(hToken, FALSE, &tkp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
-
-        TOKEN_ELEVATION Elevation;
-        DWORD cbSize = sizeof(TOKEN_ELEVATION);
-        if (GetTokenInformation(hToken, TokenElevation, &Elevation, sizeof(Elevation), &cbSize))
+        if (!LookupPrivilegeValue(NULL, SE_SYSTEM_PROFILE_NAME, &tkp.Privileges[0].Luid))
         {
-            if (!Elevation.TokenIsElevated)
-            {
-                wprintf(L"ERROR: This process must be executed from an elevated prompt.");
-                return -1;
-            }
+            wprintf(L"ERROR: Failed LookupPrivilegeValue with error 0x%x.\n", GetLastError());
+            goto cleanup;
         }
 
-        if (hToken)
+        if (!AdjustTokenPrivileges(hToken, FALSE, &tkp, 0, (PTOKEN_PRIVILEGES)NULL, 0))
         {
-            ::CloseHandle(hToken);
+            wprintf(L"ERROR: Failed AdjustTokenPrivileges with error 0x%x", GetLastError());
+            goto cleanup;
         }
     }
     else
     {
         wprintf(L"ERROR: Cannot open current process: 0x%x", HRESULT_FROM_WIN32(GetLastError()));
-        return -1;
+        goto cleanup;
     }
 
-    HANDLE stopEvent = CreateEvent(NULL, true, false, NULL);
+    stopEvent = CreateEvent(NULL, true, false, NULL);
     if (stopEvent == NULL)
     {
         wprintf(L"ERROR: Failed to create event with error 0x%x", HRESULT_FROM_WIN32(GetLastError()));
-
-        return -1;
+        goto cleanup;
     }
 
-    KernelTraceSession* kernelTraceSession = KernelTraceInstance(processName, moduleName, actionType, stopEvent);
+    kernelTraceSession = KernelTraceInstance(processName, moduleName, actionType, stopEvent);
 
     if (kernelTraceSession == NULL) {
         wprintf(L"Error: could not create a trace. kernel:0x%p\n", kernelTraceSession);
-        return -1;
+        goto cleanup;
     }
 
-    DWORD dwThreadIdKernel = 0;
-    HANDLE kernelTraceThread = CreateThread(NULL, 0, KernelTraceThreadFunc, kernelTraceSession, 0, &dwThreadIdKernel);
+    dwThreadIdKernel = 0;
+    kernelTraceThread = CreateThread(NULL, 0, KernelTraceThreadFunc, kernelTraceSession, 0, &dwThreadIdKernel);
 
     if (!SetConsoleCtrlHandler((PHANDLER_ROUTINE)ConsoleHandler, true))
     {
         printf("ERROR: Could not set control handler with error 0x%x\n", GetLastError());
-        return -1;
+        goto cleanup;
     }
 
     wprintf(L"Press Ctrl+C to stop the program.\n");
@@ -138,11 +151,26 @@ int wmain(int argc, LPWSTR argv[])
         break;
     }
 
-    kernelTraceSession->Stop();
+cleanup:
 
-    Sleep(1000);
+    if (kernelTraceSession)
+    {
+        kernelTraceSession->Stop();
 
-    TerminateThread(kernelTraceThread, NULL);
+        // wait 1 second for the processing thread
+        Sleep(1000);
+    }
+
+    if (hToken)
+    {
+        CloseHandle(hToken);
+    }
+
+    if (kernelTraceThread)
+    {
+        TerminateThread(kernelTraceThread, NULL);
+        kernelTraceThread = NULL;
+    }
 
     return 0;
 }
