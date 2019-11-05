@@ -1,8 +1,6 @@
 #pragma once
 
-#include <iostream>
 #include <Windows.h>
-#include <stdio.h>
 
 constexpr int OPTION_LENGTH = 3;
 constexpr LPCWSTR TTD_ACTION = L"TTD";
@@ -28,3 +26,15 @@ DEFINE_GUID( /* 90cbdc39-4a3e-11d1-84f4-0000f80464e3 */
     0x11d1,
     0x84, 0xf4, 0x00, 0x00, 0xf8, 0x04, 0x64, 0xe3
 );
+
+//-------------------------------------------------------------------------
+// Function for kernel trace thread.  It will call Run(), which
+// calls ProcessTrace() Windows API call.
+//-------------------------------------------------------------------------
+static DWORD WINAPI KernelTraceThreadFunc(LPVOID);
+
+//-------------------------------------------------------------------------
+// Function for handling signal events.  It will signal the stop event,
+// which stops everything and ends to program.
+//-------------------------------------------------------------------------
+bool WINAPI ConsoleHandler(DWORD);

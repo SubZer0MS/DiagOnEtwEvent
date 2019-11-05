@@ -1,13 +1,8 @@
 #include "Ktrace.h"
 #include "Utils.h"
-#include "DiagOnEtwEvent.h"
 
 static KernelTraceSessionImpl* pKernelTraceSession = NULL;
 
-//---------------------------------------------------------------------
-// Run()
-// Will block until SetStopFlag is called, so this should be called from a dedicated thread.
-//---------------------------------------------------------------------
 void KernelTraceSessionImpl::Run()
 {
     m_stopFlag = false;
@@ -22,11 +17,6 @@ void KernelTraceSessionImpl::Run()
     }
 }
 
-//---------------------------------------------------------------------
-// OnRecordEvent()
-// Called from StaticEventRecordCallback(), which is called by
-// ETW once ProcessEvent() is called.
-//---------------------------------------------------------------------
 void KernelTraceSessionImpl::OnRecordEvent(PEVENT_RECORD pEvent)
 {
     HRESULT hr = ERROR_SUCCESS;
@@ -373,13 +363,6 @@ cleanup:
     return hr;
 }
 
-//---------------------------------------------------------------------
-// Called from StaticEventBufferCallback(), which is called by
-// ETW loop in ProcessSession().
-//
-// The only reason we implement this is to signal to ETW
-// to terminate this session's ProcessSession() loop.
-//---------------------------------------------------------------------
 bool KernelTraceSessionImpl::OnBuffer(PEVENT_TRACE_LOGFILE buf)
 {
     if (m_stopFlag)
@@ -390,10 +373,6 @@ bool KernelTraceSessionImpl::OnBuffer(PEVENT_TRACE_LOGFILE buf)
     return TRUE; // keep sending me events!
 }
 
-
-//---------------------------------------------------------------------
-// Called from Setup()
-//---------------------------------------------------------------------
 bool KernelTraceSessionImpl::StartTraceSession(std::wstring mySessionName, DWORD dwEnableFlags, TRACEHANDLE& traceSessionHandle)
 {
     std::vector<unsigned char>	vecEventTraceProps;	//EVENT_TRACE_PROPERTIES || name
@@ -471,14 +450,8 @@ static bool WINAPI StaticBufferEventCallback(PEVENT_TRACE_LOGFILE buf)
     return pKernelTraceSession->OnBuffer(buf);
 }
 
-//---------------------------------------------------------------------
-// Establish a session.
-// Returns true on success, false otherwise.
-//---------------------------------------------------------------------
 bool KernelTraceSessionImpl::Setup()
 {
-    // This is where you wask for Process information, TCP, etc.  Look at StartTraceW() docs.
-
     DWORD kernelTraceOptions = EVENT_TRACE_FLAG_IMAGE_LOAD; // | EVENT_TRACE_FLAG_DISK_FILE_IO || EVENT_TRACE_FLAG_PROCESS;
 
     ULONG status = StartTraceSession(NT_LOGGER_SESSION_NAME, kernelTraceOptions, this->m_startTraceHandle);
@@ -523,10 +496,6 @@ cleanup:
     return false;
 }
 
-//---------------------------------------------------------------------
-// GetUserPropLen()
-// Calculates the length of user data properties that precede packet data.
-//---------------------------------------------------------------------
 DWORD KernelTraceSessionImpl::GetUserPropLen(PEVENT_RECORD pEvent)
 {
     PTRACE_EVENT_INFO pInfo = 0L;
@@ -570,13 +539,6 @@ DWORD KernelTraceSessionImpl::GetUserPropLen(PEVENT_RECORD pEvent)
     return status;
 }
 
-//---------------------------------------------------------------------
-// KernelTraceInstance()
-// KernelTraceSession is a singleton.  Will return existing instance or
-// create a new one before return.
-//
-// Returns NULL if setup failed, instance otherwise.
-//---------------------------------------------------------------------
 KernelTraceSession* KernelTraceInstance(LPWSTR processName, LPWSTR moduleName, LPWSTR actionType, HANDLE stopEvent)
 {
 
@@ -600,11 +562,6 @@ KernelTraceSession* KernelTraceInstance(LPWSTR processName, LPWSTR moduleName, L
     return obj;
 }
 
-//---------------------------------------------------------------------
-// GetKernelTraceInstance()
-// KernelTraceSession is a singleton and returns the existing instance.
-// Returns NULL if setup failed, instance otherwise.
-//---------------------------------------------------------------------
 KernelTraceSession* GetKernelTraceInstance()
 {
     return pKernelTraceSession;

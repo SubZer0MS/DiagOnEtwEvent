@@ -68,21 +68,26 @@ public:
     virtual HANDLE GetStopEvent() = 0;
 };
 
-/**
- * KernelTraceSession is a singleton.  Will return existing instance or
- * create a new one before return.
- *
- * Returns NULL if setup failed, instance otherwise.
- */
+//---------------------------------------------------------------------
+// KernelTraceInstance()
+// KernelTraceSession is a singleton.  Will return existing instance or
+// create a new one before return.
+//
+// Returns NULL if setup failed, instance otherwise.
+//---------------------------------------------------------------------
 KernelTraceSession* KernelTraceInstance(LPWSTR, LPWSTR, LPWSTR, HANDLE);
+
+//---------------------------------------------------------------------
+// GetKernelTraceInstance()
+// KernelTraceSession is a singleton and returns the existing instance.
+// Returns NULL if setup failed, instance otherwise.
+//---------------------------------------------------------------------
 KernelTraceSession* GetKernelTraceInstance();
 
 class KernelTraceSessionImpl : public KernelTraceSession
 {
 public:
-    /*
-     * constructor
-     */
+
     KernelTraceSessionImpl(LPWSTR processName, LPWSTR moduleName, LPWSTR actionType, HANDLE stopEvent) : 
         m_stopFlag(false),
         m_userPropLen(0),
@@ -112,6 +117,10 @@ public:
         }
     }
 
+    //---------------------------------------------------------------------
+    // Run()
+    // Will block until SetStopFlag is called, so this should be called from a dedicated thread.
+    //---------------------------------------------------------------------
     virtual void Run();
 
     virtual void Stop()
@@ -124,10 +133,28 @@ public:
         }
     }
 
+    //---------------------------------------------------------------------
+    // Establish a session.
+    // Returns true on success, false otherwise.
+    //---------------------------------------------------------------------
     bool Setup();
+
+    //---------------------------------------------------------------------
+    // OnRecordEvent()
+    // Called from StaticEventRecordCallback(), which is called by
+    // ETW once ProcessEvent() is called.
+    //---------------------------------------------------------------------
     void OnRecordEvent(PEVENT_RECORD);
+
+    //---------------------------------------------------------------------
+    // Called from StaticEventBufferCallback(), which is called by
+    // ETW loop in ProcessSession().
+    //
+    // The only reason we implement this is to signal to ETW
+    // to terminate this session's ProcessSession() loop.
+    //---------------------------------------------------------------------
     bool OnBuffer(PEVENT_TRACE_LOGFILE);
-    bool StartTraceSession(std::wstring, DWORD, TRACEHANDLE&);
+
     HRESULT DoActionDbg(HANDLE, DWORD, LPCWSTR);
     HRESULT DoActionTtd(DWORD);
     HANDLE GetStopEvent()
@@ -135,8 +162,18 @@ public:
         return m_stopEvent;
     }
 
+
 private:
 
+    //---------------------------------------------------------------------
+    // Called from Setup() and will start the trace session
+    //---------------------------------------------------------------------
+    bool StartTraceSession(std::wstring, DWORD, TRACEHANDLE&);
+
+    //---------------------------------------------------------------------
+    // GetUserPropLen()
+    // Calculates the length of user data properties that precede packet data.
+    //---------------------------------------------------------------------
     DWORD GetUserPropLen(PEVENT_RECORD);
 
     bool m_stopFlag;

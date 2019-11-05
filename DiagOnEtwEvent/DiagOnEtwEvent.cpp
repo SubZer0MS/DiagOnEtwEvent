@@ -1,37 +1,6 @@
 #include "DiagOnEtwEvent.h"
 #include "Ktrace.h"
 
-//-------------------------------------------------------------------------
-// Function for kernel trace thread.  It will call Run(), which
-// calls ProcessTrace() Windows API call.
-//-------------------------------------------------------------------------
-static DWORD WINAPI KernelTraceThreadFunc(LPVOID lpParam)
-{
-    KernelTraceSession* kernelTraceSession = (KernelTraceSession*)lpParam;
-    kernelTraceSession->Run();
-
-    return 0;
-}
-
-//-------------------------------------------------------------------------
-// Function for handling signal events.  It will signal the stop event,
-// which stops everything and ends to program.
-//-------------------------------------------------------------------------
-
-bool WINAPI ConsoleHandler(DWORD signal)
-{
-    if (signal == CTRL_C_EVENT ||
-        signal == CTRL_CLOSE_EVENT ||
-        signal == CTRL_LOGOFF_EVENT ||
-        signal == CTRL_SHUTDOWN_EVENT
-        )
-    {
-        SetEvent(GetKernelTraceInstance()->GetStopEvent());
-    }
-
-    return true;
-}
-
 int wmain(int argc, LPWSTR argv[])
 {
     if (argc < 3 || argc > 4)
@@ -179,4 +148,26 @@ cleanup:
     }
 
     return hr;
+}
+
+static DWORD WINAPI KernelTraceThreadFunc(LPVOID lpParam)
+{
+    KernelTraceSession* kernelTraceSession = (KernelTraceSession*)lpParam;
+    kernelTraceSession->Run();
+
+    return 0;
+}
+
+bool WINAPI ConsoleHandler(DWORD signal)
+{
+    if (signal == CTRL_C_EVENT ||
+        signal == CTRL_CLOSE_EVENT ||
+        signal == CTRL_LOGOFF_EVENT ||
+        signal == CTRL_SHUTDOWN_EVENT
+        )
+    {
+        SetEvent(GetKernelTraceInstance()->GetStopEvent());
+    }
+
+    return true;
 }
