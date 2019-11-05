@@ -4,6 +4,7 @@
 #include <Windows.h>
 #include <stdio.h>
 
+constexpr int OPTION_LENGTH = 3;
 constexpr LPCWSTR TTD_ACTION = L"TTD";
 constexpr LPCWSTR DBG_ACTION = L"DBG";
 

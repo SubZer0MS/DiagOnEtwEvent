@@ -193,7 +193,7 @@ void KernelTraceSessionImpl::OnRecordEvent(PEVENT_RECORD pEvent)
                                 hr = DoActionTtd(processId);
                             }
 
-                            wprintf(L"Last action that set the HR, set it to a value of 0x%x - if there was not other error message, this might be expected.\n", HRESULT_FROM_WIN32(hr));
+                            wprintf(L"Last action that set the HR, set it to a value of 0x%x - if there was not other error message, this might be expected.\n", hr);
                         }
                     }
                 }
@@ -238,13 +238,8 @@ HRESULT KernelTraceSessionImpl::DoActionTtd(DWORD processId)
     si.cb = sizeof(si);
     ZeroMemory(&pi, sizeof(pi));
 
-    LPWSTR commandLine = (LPWSTR)malloc(sizeof(WCHAR) * MAX_PATH);
-    commandLine[0] = '\0';
-    wcscat_s(commandLine, MAX_PATH, TTD_DEFAULT_CMDLINE);
-
-    WCHAR processIdString[10];
-    _ultow_s(processId, processIdString, 10, 10);
-    wcscat_s(commandLine, MAX_PATH, processIdString);
+    WCHAR commandLine[MAX_PATH];
+    StringCchPrintf(commandLine, MAX_PATH, L"%s %d", TTD_DEFAULT_CMDLINE, processId);
 
     LPDWORD result = 0;
     HKEY registryKey = NULL;
@@ -291,6 +286,8 @@ HRESULT KernelTraceSessionImpl::DoActionTtd(DWORD processId)
             wprintf(L"ERROR: Could not start the process with error 0x%x\n", HRESULT_FROM_WIN32(hr));
         }
 
+        hr = HRESULT_FROM_WIN32(hr);
+
         goto cleanup;
     }
 
@@ -302,12 +299,6 @@ HRESULT KernelTraceSessionImpl::DoActionTtd(DWORD processId)
     CloseHandle(pi.hThread);
 
 cleanup:
-
-    if (commandLine)
-    {
-        free(commandLine);
-        commandLine = NULL;
-    }
 
     Stop();
 
@@ -329,7 +320,6 @@ HRESULT KernelTraceSessionImpl::DoActionDbg(HANDLE hProcess, DWORD processId, LP
         MiniDumpWithThreadInfo;
 
     WCHAR dumpFileTime[MAX_PATH];
-    dumpFileTime[0] = '\0';
     struct tm timenow;
     __int64 ltime;
     _time64(&ltime);
@@ -343,7 +333,7 @@ HRESULT KernelTraceSessionImpl::DoActionDbg(HANDLE hProcess, DWORD processId, LP
 
     wcsftime(dumpFileTime, MAX_PATH, L"%Y_%m_%d_%H_%M_%S", &timenow);
     WCHAR dumpFileName[MAX_PATH];
-    StringCbPrintf(dumpFileName, MAX_PATH, L"%s_%s.dmp", processName, dumpFileTime);
+    StringCchPrintf(dumpFileName, MAX_PATH, L"%s_%s.dmp", processName, dumpFileTime);
 
     hFile = CreateFile(dumpFileName, GENERIC_ALL, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (hFile == NULL)

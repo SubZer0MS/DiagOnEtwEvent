@@ -9,12 +9,13 @@
 
 #pragma comment(lib, "ws2_32.lib")
 
-#define MAX_NAME 256
+constexpr int MAX_NAME = 256;
 
 typedef LPTSTR(NTAPI* PIPV6ADDRTOSTRING)(const PIN6_ADDR, LPTSTR);
 
 static PCWCHAR g_pSource[] = { L"XML instrumentation manifest", L"WMI MOF class", L"WPP TMF file" };
 
+void PrintCSBackupAPIErrorMessage(DWORD);
 DWORD PrintProperties(PEVENT_RECORD, PTRACE_EVENT_INFO, USHORT, LPWSTR, USHORT);
 DWORD GetEventInformation(PEVENT_RECORD, PTRACE_EVENT_INFO&);
 DWORD PrintPropertyMetadata(TRACE_EVENT_INFO*, DWORD, USHORT);

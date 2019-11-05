@@ -25,7 +25,7 @@ constexpr LPCWSTR ACTION_DMP = L"DMP";
 constexpr LPCWSTR TTD_REGISTRY_PATH = L".DEFAULT\\Software\\Microsoft\\TTT";
 constexpr LPCWSTR TTD_PROCESS_NAME = L"TTTracer.exe";
 constexpr LPCWSTR TTD_REGISTRY_EULA_KEY = L"EULASigned";
-constexpr LPCWSTR TTD_DEFAULT_CMDLINE = L"-dumpFull -children -attach ";
+constexpr LPCWSTR TTD_DEFAULT_CMDLINE = L"-dumpFull -children -attach";
 constexpr LPCWSTR NT_LOGGER_SESSION_NAME = L"NT Kernel Logger"; // DO NOT CHANGE - must be this value
 
 enum Image_Load
@@ -96,24 +96,6 @@ public:
 
     ~KernelTraceSessionImpl()
     {
-        if (m_processName)
-        {
-            free(m_processName);
-            m_processName = NULL;
-        }
-
-        if (m_moduleName)
-        {
-            free(m_moduleName);
-            m_moduleName = NULL;
-        }
-
-        if (m_actionType)
-        {
-            free(m_actionType);
-            m_actionType = NULL;
-        }
-
         if (m_startTraceHandle)
         {
             HRESULT hr = ::ControlTrace(m_startTraceHandle, NT_LOGGER_SESSION_NAME, m_petp, EVENT_TRACE_CONTROL_STOP);
