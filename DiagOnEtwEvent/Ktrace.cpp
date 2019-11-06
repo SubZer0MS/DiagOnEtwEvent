@@ -7,7 +7,6 @@ void KernelTraceSessionImpl::Run()
     m_stopFlag = false;
 
     // Process Trace - blocks until BufferCallback returns FALSE, or
-
     ULONG status = ProcessTrace(&m_startTraceHandle, 1, 0, 0);
     if (status != ERROR_SUCCESS && status != ERROR_CANCELLED)
     {
@@ -62,8 +61,8 @@ void KernelTraceSessionImpl::OnRecordEventHandleImageLoad(PEVENT_RECORD pEvent, 
     PBYTE pData = NULL;
     HANDLE hProcess = NULL;
 
-    if (wcscmp(L"ProcessId", ((LPWSTR)((PBYTE)(pInfo)+pInfo->EventPropertyInfoArray[Image_Load::ProcessId].NameOffset))) == 0 &&
-        wcscmp(L"FileName", ((LPWSTR)((PBYTE)(pInfo)+pInfo->EventPropertyInfoArray[Image_Load::FileName].NameOffset))) == 0
+    if (wcscmp(L"ProcessId", ((LPWSTR)((PBYTE)(pInfo) + pInfo->EventPropertyInfoArray[Image_Load::ProcessId].NameOffset))) == 0 &&
+        wcscmp(L"FileName", ((LPWSTR)((PBYTE)(pInfo) + pInfo->EventPropertyInfoArray[Image_Load::FileName].NameOffset))) == 0
         )
     {
         hr = GetArraySize(pEvent, pInfo, 1, &ArraySize);
@@ -74,7 +73,7 @@ void KernelTraceSessionImpl::OnRecordEventHandleImageLoad(PEVENT_RECORD pEvent, 
         }
 
         ZeroMemory(&DataDescriptors, sizeof(DataDescriptors));
-        DataDescriptors[0].PropertyName = (ULONGLONG)((PBYTE)(pInfo)+pInfo->EventPropertyInfoArray[Image_Load::FileName].NameOffset);
+        DataDescriptors[0].PropertyName = (ULONGLONG)((PBYTE)(pInfo) + pInfo->EventPropertyInfoArray[Image_Load::FileName].NameOffset);
         DataDescriptors[0].ArrayIndex = 0;
         DescriptorsCount = 1;
 
@@ -99,7 +98,7 @@ void KernelTraceSessionImpl::OnRecordEventHandleImageLoad(PEVENT_RECORD pEvent, 
 
         LPWSTR fileName = PathFindFileName((LPWSTR)pData);
 
-        DataDescriptors[0].PropertyName = (ULONGLONG)((PBYTE)(pInfo)+pInfo->EventPropertyInfoArray[Image_Load::ProcessId].NameOffset);
+        DataDescriptors[0].PropertyName = (ULONGLONG)((PBYTE)(pInfo) + pInfo->EventPropertyInfoArray[Image_Load::ProcessId].NameOffset);
 
         hr = TdhGetPropertySize(pEvent, 0, NULL, DescriptorsCount, &DataDescriptors[0], &PropertySize);
         if (ERROR_SUCCESS != hr)
@@ -197,7 +196,7 @@ void KernelTraceSessionImpl::OnRecordEventHandleImageLoad(PEVENT_RECORD pEvent, 
                         hr = DoActionTtd(processId);
                     }
 
-                    wprintf(L"Last action that set the HR, set it to a value of 0x%x - if there was not other error message, this might be expected.\n", hr);
+                    wprintf(L"Last action that set the HRESULT, set it to a value of 0x%x - if there was no other error message, this might be expected.\n", hr);
                 }
             }
         }
