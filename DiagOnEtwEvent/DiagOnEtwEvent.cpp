@@ -52,7 +52,7 @@ int wmain(int argc, LPWSTR argv[])
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken))
     {
         hr = GetLastError();
-        wprintf(L"ERROR: Cannot open process Token: 0x%x", hr);
+        Win32ErrorToString(L"ERROR: Cannot open process Token", hr);
         goto cleanup;
     }
     
@@ -61,14 +61,14 @@ int wmain(int argc, LPWSTR argv[])
         if (!elevation.TokenIsElevated)
         {
             hr = HRESULT_FROM_WIN32(ERROR_ACCESS_DENIED);
-            wprintf(L"ERROR: This process must be executed from an elevated prompt.\n");
+            Win32ErrorToString(L"ERROR: This process must be executed from an elevated prompt", hr);
             goto cleanup;
         }
     }
     else
     {
         hr = GetLastError();
-        wprintf(L"ERROR: Failed to get token information with error 0x%x.\n", hr);
+        Win32ErrorToString(L"ERROR: Failed to get token information", hr);
         goto cleanup;
     }
     
@@ -79,14 +79,14 @@ int wmain(int argc, LPWSTR argv[])
     if (!LookupPrivilegeValue(NULL, SE_SYSTEM_PROFILE_NAME, &tkp.Privileges[0].Luid))
     {
         hr = GetLastError();
-        wprintf(L"ERROR: Failed LookupPrivilegeValue with error 0x%x.\n", hr);
+        Win32ErrorToString(L"ERROR: Failed LookupPrivilegeValue", hr);
         goto cleanup;
     }
 
     if (!AdjustTokenPrivileges(hToken, FALSE, &tkp, 0, (PTOKEN_PRIVILEGES)NULL, 0))
     {
         hr = GetLastError();
-        wprintf(L"ERROR: Failed AdjustTokenPrivileges with error 0x%x", hr);
+        Win32ErrorToString(L"ERROR: Failed AdjustTokenPrivileges", hr);
         goto cleanup;
     }
 
@@ -94,7 +94,7 @@ int wmain(int argc, LPWSTR argv[])
     if (stopEvent == NULL)
     {
         hr = GetLastError();
-        wprintf(L"ERROR: Failed to create event with error 0x%x", hr);
+        Win32ErrorToString(L"ERROR: Failed to create event", hr);
         goto cleanup;
     }
 
@@ -102,7 +102,7 @@ int wmain(int argc, LPWSTR argv[])
     if (kernelTraceSession == NULL)
     {
         hr = E_FAIL;
-        wprintf(L"Error: could not create a trace. kernel:0x%p\n", kernelTraceSession);
+        Win32ErrorToString(L"ERROR: Could not create the trace", hr);
         goto cleanup;
     }
 
@@ -112,7 +112,7 @@ int wmain(int argc, LPWSTR argv[])
     if (!SetConsoleCtrlHandler((PHANDLER_ROUTINE)ConsoleHandler, true))
     {
         hr = GetLastError();
-        printf("ERROR: Could not set control handler with error 0x%x\n", hr);
+        Win32ErrorToString(L"ERROR: Could not set control handler", hr);
         goto cleanup;
     }
 
@@ -125,7 +125,7 @@ int wmain(int argc, LPWSTR argv[])
     else
     {
         hr = GetLastError();
-        wprintf(L"ERROR: WaitForSingleObject failed 0x%x\n", hr);
+        Win32ErrorToString(L"ERROR: WaitForSingleObject failed", hr);
     }
 
 
@@ -139,6 +139,7 @@ cleanup:
     if (hToken)
     {
         CloseHandle(hToken);
+        hToken = NULL;
     }
 
     if (kernelTraceThread)

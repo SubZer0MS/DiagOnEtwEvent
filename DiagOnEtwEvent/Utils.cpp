@@ -3,55 +3,32 @@
 // Display error message text, given an error code.
 // Typically, the parameter passed to this function is retrieved
 // from GetLastError().
-void PrintCSBackupAPIErrorMessage(DWORD dwErr)
+void Win32ErrorToString(LPCWSTR szMessage, DWORD dwErr)
 {
-    WCHAR wszMsgBuff[512];  // Buffer for text.
-    DWORD dwChars;  // Number of chars returned.
+    const int maxSite = 512;
+    PCWSTR szDefaultMessage = L"<< unknown message for this error code >>";
+    WCHAR wszMsgBuff[maxSite];
+    DWORD dwChars;
 
-    // Try to get the message from the system errors.
-    dwChars = FormatMessage(
-        FORMAT_MESSAGE_FROM_SYSTEM |
-        FORMAT_MESSAGE_IGNORE_INSERTS,
-        NULL,
-        dwErr,
-        0,
-        wszMsgBuff,
-        512,
-        NULL);
+    dwChars = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, dwErr, 0, wszMsgBuff, maxSite, nullptr);
 
-    if (0 == dwChars)
+    if (!dwChars)
     {
-        // The error code did not exist in the system errors.
-        // Try Ntdsbmsg.dll for the error code.
-
         HINSTANCE hInst;
 
-        // Load the library.
         hInst = LoadLibrary(L"Ntdsbmsg.dll");
-        if (NULL == hInst)
+        if (!hInst)
         {
-            wprintf(L"Cannot load Ntdsbmsg.dll\n");
-            return;
+            wprintf(L"%s - error %x => %s\n", szMessage, dwErr, szDefaultMessage);
         }
-
-        // Try getting message text from ntdsbmsg.
-        dwChars = FormatMessage(
-            FORMAT_MESSAGE_FROM_HMODULE |
-            FORMAT_MESSAGE_IGNORE_INSERTS,
-            hInst,
-            dwErr,
-            0,
-            wszMsgBuff,
-            512,
-            NULL);
-
-        // Free the library.
-        FreeLibrary(hInst);
-
+        else
+        {
+            dwChars = FormatMessage(FORMAT_MESSAGE_FROM_HMODULE | FORMAT_MESSAGE_IGNORE_INSERTS, hInst, dwErr, 0, wszMsgBuff, maxSite, nullptr);
+            FreeLibrary(hInst);
+        }
     }
 
-    // Display the error message, or generic text if not found.
-    wprintf(L"Error value: %d Message: %s\n", dwErr, dwChars ? wszMsgBuff : L"Error message not found.");
+    wprintf(L"%s - error %x => %s\n", szMessage, dwErr, (dwChars ? wszMsgBuff : szDefaultMessage));
 }
 
 void PrintEventMeta(PEVENT_RECORD pEvent)

@@ -15,7 +15,7 @@ typedef LPTSTR(NTAPI* PIPV6ADDRTOSTRING)(const PIN6_ADDR, LPTSTR);
 
 static PCWCHAR g_pSource[] = { L"XML instrumentation manifest", L"WMI MOF class", L"WPP TMF file" };
 
-void PrintCSBackupAPIErrorMessage(DWORD);
+void Win32ErrorToString(LPCWSTR, DWORD);
 DWORD PrintProperties(PEVENT_RECORD, PTRACE_EVENT_INFO, USHORT, LPWSTR, USHORT);
 DWORD GetEventInformation(PEVENT_RECORD, PTRACE_EVENT_INFO&);
 DWORD PrintPropertyMetadata(TRACE_EVENT_INFO*, DWORD, USHORT);

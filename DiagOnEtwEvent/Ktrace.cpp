@@ -10,7 +10,7 @@ void KernelTraceSessionImpl::Run()
     ULONG status = ProcessTrace(&m_startTraceHandle, 1, 0, 0);
     if (status != ERROR_SUCCESS && status != ERROR_CANCELLED)
     {
-        wprintf(L"KernelTraceSessionImpl: ProcessTrace() failed with %lu\n", status);
+        Win32ErrorToString(L"ERROR: KernelTraceSessionImpl: ProcessTrace() failed", status);
         CloseTrace(m_startTraceHandle);
     }
 }
@@ -30,7 +30,7 @@ void KernelTraceSessionImpl::OnRecordEvent(PEVENT_RECORD pEvent)
         hr = GetEventInformation(pEvent, pInfo);
         if (ERROR_SUCCESS != hr)
         {
-            wprintf(L"GetEventInformation failed with %lu\n", hr);
+            Win32ErrorToString(L"ERROR: GetEventInformation failed", hr);
             goto cleanup;
         }
         
@@ -53,7 +53,6 @@ cleanup:
 void KernelTraceSessionImpl::OnRecordEventHandleImageLoad(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo)
 {
     HRESULT hr = ERROR_SUCCESS;
-    USHORT ArraySize = 0;
     PEVENT_MAP_INFO pMapInfo = NULL;
     PROPERTY_DATA_DESCRIPTOR DataDescriptors[1];
     ULONG DescriptorsCount = 0;
@@ -65,32 +64,23 @@ void KernelTraceSessionImpl::OnRecordEventHandleImageLoad(PEVENT_RECORD pEvent, 
         wcscmp(L"FileName", ((LPWSTR)((PBYTE)(pInfo) + pInfo->EventPropertyInfoArray[Image_Load::FileName].NameOffset))) == 0
         )
     {
-        hr = GetArraySize(pEvent, pInfo, 1, &ArraySize);
-        if (ERROR_SUCCESS != hr)
-        {
-            wprintf(L"GetArraySize failed with %lu\n", hr);
-            goto cleanup;
-        }
-
         ZeroMemory(&DataDescriptors, sizeof(DataDescriptors));
         DataDescriptors[0].PropertyName = (ULONGLONG)((PBYTE)(pInfo) + pInfo->EventPropertyInfoArray[Image_Load::FileName].NameOffset);
         DataDescriptors[0].ArrayIndex = 0;
         DescriptorsCount = 1;
 
         hr = TdhGetPropertySize(pEvent, 0, NULL, DescriptorsCount, &DataDescriptors[0], &PropertySize);
-
         if (ERROR_SUCCESS != hr)
         {
-            wprintf(L"TdhGetPropertySize failed with %lu\n", hr);
+            Win32ErrorToString(L"ERROR: TdhGetPropertySize failed", hr);
             goto cleanup;
         }
 
         pData = (PBYTE)malloc(PropertySize);
-
         if (NULL == pData)
         {
-            wprintf(L"Failed to allocate memory for property data\n");
-            hr = ERROR_OUTOFMEMORY;
+            hr = HRESULT_FROM_WIN32(ERROR_OUTOFMEMORY);
+            Win32ErrorToString(L"ERROR: Failed to allocate memory for property data", hr);
             goto cleanup;
         }
 
@@ -103,15 +93,15 @@ void KernelTraceSessionImpl::OnRecordEventHandleImageLoad(PEVENT_RECORD pEvent, 
         hr = TdhGetPropertySize(pEvent, 0, NULL, DescriptorsCount, &DataDescriptors[0], &PropertySize);
         if (ERROR_SUCCESS != hr)
         {
-            wprintf(L"TdhGetPropertySize failed with %lu\n", hr);
+            Win32ErrorToString(L"ERROR: TdhGetPropertySize failed", hr);
             goto cleanup;
         }
 
         PBYTE pDataTmp = (PBYTE)realloc(pData, PropertySize);
         if (NULL == pDataTmp)
         {
-            wprintf(L"Failed to allocate memory for property data\n");
             hr = HRESULT_FROM_WIN32(ERROR_OUTOFMEMORY);
+            Win32ErrorToString(L"ERROR: Failed to allocate memory for property data\n", hr);
             goto cleanup;
         }
         else
@@ -122,8 +112,8 @@ void KernelTraceSessionImpl::OnRecordEventHandleImageLoad(PEVENT_RECORD pEvent, 
 
         if (NULL == pData)
         {
-            wprintf(L"Failed to allocate memory for property data\n");
-            hr = ERROR_OUTOFMEMORY;
+            hr = HRESULT_FROM_WIN32(ERROR_OUTOFMEMORY);
+            Win32ErrorToString(L"ERROR: Failed to allocate memory for property data\n", hr);
             goto cleanup;
         }
 
@@ -140,7 +130,8 @@ void KernelTraceSessionImpl::OnRecordEventHandleImageLoad(PEVENT_RECORD pEvent, 
                 hr != ERROR_ACCESS_DENIED
                 )
             {
-                wprintf(L"OpenProcess returned 0x%x for PID %d\n", HRESULT_FROM_WIN32(hr), processId);
+                hr = HRESULT_FROM_WIN32(hr);
+                Win32ErrorToString(L"ERROR: OpenProcess failed", hr);
             }
 
             hr = ERROR_SUCCESS;
@@ -157,7 +148,7 @@ void KernelTraceSessionImpl::OnRecordEventHandleImageLoad(PEVENT_RECORD pEvent, 
             if (hr == NULL)
             {
                 hr = HRESULT_FROM_WIN32(GetLastError());
-                wprintf(L"PathFindFileName failed: 0x%x\n", hr);
+                Win32ErrorToString(L"ERROR: PathFindFileName failed", hr);
                 goto cleanup;
             }
         }
@@ -242,7 +233,8 @@ HRESULT KernelTraceSessionImpl::DoActionTtd(DWORD processId)
     hr = RegCreateKeyEx(HKEY_USERS, TTD_REGISTRY_PATH, 0, NULL, NULL, KEY_ALL_ACCESS, NULL, &registryKey, result);
     if (hr != ERROR_SUCCESS)
     {
-        wprintf(L"ERROR: Failed to create/open the TTD EULA registry key with error 0x%x\n", HRESULT_FROM_WIN32(hr));
+        hr = HRESULT_FROM_WIN32(hr);
+        Win32ErrorToString(L"ERROR: Failed to create/open the TTD EULA registry key", hr);
         goto cleanup;
     }
 
@@ -252,7 +244,8 @@ HRESULT KernelTraceSessionImpl::DoActionTtd(DWORD processId)
 
     if (hr != ERROR_SUCCESS)
     {
-        wprintf(L"ERROR: Failed to set EULASigned registry value for TTD EULA registry key with error 0x%x\n", HRESULT_FROM_WIN32(hr));
+        hr = HRESULT_FROM_WIN32(hr);
+        Win32ErrorToString(L"ERROR: Failed to set EULASigned registry value for TTD EULA registry key", hr);
         goto cleanup;
     }
 
@@ -275,14 +268,13 @@ HRESULT KernelTraceSessionImpl::DoActionTtd(DWORD processId)
 
         if (hr == ERROR_FILE_NOT_FOUND)
         {
-            wprintf(L"ERROR: This program (executable) needs to be in the same folder as TTTRacer.exe and its dependent files.\n");
+            Win32ErrorToString(L"ERROR: This program (executable) needs to be in the same folder as TTTRacer.exe and its dependent files", HRESULT_FROM_WIN32(hr));
         }
         else
         {
-            wprintf(L"ERROR: Could not start the process with error 0x%x\n", HRESULT_FROM_WIN32(hr));
+            hr = HRESULT_FROM_WIN32(hr);
+            Win32ErrorToString(L"ERROR: Could not start the process", hr);
         }
-
-        hr = HRESULT_FROM_WIN32(hr);
 
         goto cleanup;
     }
@@ -323,7 +315,7 @@ HRESULT KernelTraceSessionImpl::DoActionDbg(HANDLE hProcess, DWORD processId, LP
     if (err)
     {
         hr = HRESULT_FROM_WIN32(err);
-        wprintf(L"ERROR: Failed to create date time for file name with error 0x%x\n", hr);
+        Win32ErrorToString(L"ERROR: Failed to create date time for file name", hr);
         goto cleanup;
     }
 
@@ -335,7 +327,7 @@ HRESULT KernelTraceSessionImpl::DoActionDbg(HANDLE hProcess, DWORD processId, LP
     if (hFile == NULL)
     {
         hr = GetLastError();
-        wprintf(L"ERROR: Failed to create the file for the memory dump with error 0x%x\n", HRESULT_FROM_WIN32(hr));
+        Win32ErrorToString(L"ERROR: Failed to create the file for the memory dump", hr);
         goto cleanup;
     }
 
@@ -350,7 +342,7 @@ HRESULT KernelTraceSessionImpl::DoActionDbg(HANDLE hProcess, DWORD processId, LP
         )
     {
         hr = GetLastError();
-        wprintf(L"ERROR: Failed to write the memory dump with error 0x%x\n", HRESULT_FROM_WIN32(hr));
+        Win32ErrorToString(L"ERROR: Failed to write the memory dump", hr);
         goto cleanup;
     }
 
@@ -405,14 +397,16 @@ bool KernelTraceSessionImpl::StartTraceSession(std::wstring mySessionName, DWORD
 
         if (hr != ERROR_SUCCESS)
         {
-            printf("ControlTrace returned %ul\n", hr);
+            hr = HRESULT_FROM_WIN32(hr);
+            Win32ErrorToString(L"ERROR: ControlTrace failed", hr);
             traceSessionHandle = NULL;
             return false;
         }
     }
     else if (hr != ERROR_SUCCESS)
     {
-        printf("StartTraceW returned %ul\n", hr);
+        hr = HRESULT_FROM_WIN32(hr);
+        Win32ErrorToString(L"ERROR: StartTrace failed", hr);
         traceSessionHandle = NULL;
         return false;
     }
@@ -421,7 +415,8 @@ bool KernelTraceSessionImpl::StartTraceSession(std::wstring mySessionName, DWORD
         hr = EnableTraceEx2(traceSessionHandle, &SystemTraceControlGuid, EVENT_CONTROL_CODE_ENABLE_PROVIDER, TRACE_LEVEL_VERBOSE, 0, 0, 0, NULL);
         if (hr != ERROR_SUCCESS)
         {
-            printf("EnableTraceEx2 returned %ul\n", hr);
+            hr = HRESULT_FROM_WIN32(hr);
+            Win32ErrorToString(L"ERROR: EnableTraceEx2 failed", hr);
             traceSessionHandle = NULL;
             return false;
         }
@@ -489,7 +484,7 @@ bool KernelTraceSessionImpl::Setup()
     this->m_startTraceHandle = OpenTrace(&trace);
     if (INVALID_PROCESSTRACE_HANDLE == this->m_startTraceHandle)
     {
-        wprintf(L"KernelTraceSession: OpenTrace() failed with %lu\n", GetLastError());
+        Win32ErrorToString(L"ERROR: OpenTrace failed", GetLastError());
         goto cleanup;
     }
 
@@ -516,32 +511,37 @@ DWORD KernelTraceSessionImpl::GetUserPropLen(PEVENT_RECORD pEvent)
         pInfo = (PTRACE_EVENT_INFO)malloc(BufferSize);
         if (pInfo == NULL)
         {
-            wprintf(L"Failed to allocate memory for event info (size=%lu).\n", BufferSize);
-            return ERROR_OUTOFMEMORY;
+            Win32ErrorToString(L"ERROR: Failed to allocate memory for event info", HRESULT_FROM_WIN32(ERROR_OUTOFMEMORY));
+            return HRESULT_FROM_WIN32(ERROR_OUTOFMEMORY);
         }
 
         // Retrieve the event metadata.
-
         status = TdhGetEventInformation(pEvent, 0, NULL, pInfo, &BufferSize);
     }
 
     if (ERROR_SUCCESS != status) return status;
 
     // loop through properties
-
     int proplen = 0;
     for (uint32_t i = 0; i < pInfo->PropertyCount; i++)
     {
         if ((pInfo->EventPropertyInfoArray[i].Flags & PropertyParamLength) == PropertyParamLength)
+        {
             continue; // buffer, defined by previous property length
+        }
+
         proplen += pInfo->EventPropertyInfoArray[i].length;
     }
 
     // proplen now contains offset to start of packet bytes inside UserData
 
-    if (proplen > 0) m_userPropLen = proplen;
+    if (proplen > 0)
+    {
+        m_userPropLen = proplen;
+    }
 
     free(pInfo);
+
     return status;
 }
 
@@ -557,7 +557,7 @@ KernelTraceSession* KernelTraceInstance(LPWSTR processName, LPWSTR moduleName, L
 
     if (obj->Setup() == false)
     {
-        printf("KernelTraceSession Setup failed\n");
+        Win32ErrorToString(L"ERROR: KernelTraceSession Setup failed", E_FAIL);
         delete obj;
         
         return NULL;

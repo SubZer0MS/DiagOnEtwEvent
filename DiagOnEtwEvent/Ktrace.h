@@ -109,7 +109,7 @@ public:
 
             if (hr != ERROR_SUCCESS)
             {
-                printf("ControlTrace returned %ul\n", hr);
+                Win32ErrorToString(L"ERROR: ControlTrace failed", HRESULT_FROM_WIN32(hr));
             }
         }
 
